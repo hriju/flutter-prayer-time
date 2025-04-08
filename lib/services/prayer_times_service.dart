@@ -1,50 +1,79 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:prayer_time/services/notification_service.dart';
+import 'package:prayer_time/services/location_service.dart';
+import 'package:flutter/foundation.dart';
 
 class PrayerTimesService {
-  // Comment out Firebase collection reference
-  // final CollectionReference _prayerTimesCollection = FirebaseFirestore.instance.collection('prayerTimes');
-  
   // Cache keys
   static const String _cachedDateKey = 'cached_date';
   static const String _cachedPrayerTimesKey = 'cached_prayer_times';
-  static const String _cachedHanafiAsrKey = 'cached_hanafi_asr';
   
-  // Notification service
-  final NotificationService _notificationService = NotificationService();
+  // Services
+  final LocationService _locationService = LocationService();
   
-  Future<Map<String, dynamic>?> fetchCurrentPrayerTimes() async {
+  Future<Map<String, dynamic>?> fetchPrayerTimesForDate(DateTime date) async {
     try {
-      // Get current date
-      final now = DateTime.now();
-      final today = DateFormat('yyyy-MM-dd').format(now);
+      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+      print('Fetching prayer times for date: $dateStr');
       
-      // First, try to get cached data for today
-      final cachedData = await _getCachedPrayerTimes(today);
-      if (cachedData != null) {
-        print('Using cached prayer times for $today');
-        return cachedData;
+      // Get stored coordinates
+      final coordinates = await _locationService.getStoredCoordinates();
+      if (coordinates == null) {
+        throw Exception('Location not set. Please set your location first.');
       }
       
-      // If no cached data for today, fetch from API
-      print('Fetching prayer times from API for $today');
+      final latitude = coordinates['latitude'];
+      final longitude = coordinates['longitude'];
       
-      // Plano, Texas coordinates
-      final latitude = 33.0198;
-      final longitude = -96.6989;
+      // First, fetch the Hijri date
+      final hijriUrl = Uri.parse('https://api.aladhan.com/v1/gToH/$dateStr');
+      print('Fetching Hijri date from: $hijriUrl');
+      
+      final hijriResponse = await http.get(
+        hijriUrl,
+        headers: {
+          'Accept': 'application/json',
+        },
+      );
+      
+      print('Hijri API Response Status: ${hijriResponse.statusCode}');
+      print('Hijri API Response Body: ${hijriResponse.body}');
+      
+      String hijriDateStr = '';
+      if (hijriResponse.statusCode == 200) {
+        final hijriData = json.decode(hijriResponse.body);
+        print('Parsed Hijri Data: $hijriData');
+        
+        if (hijriData['code'] == 200 && hijriData['data'] != null) {
+          final hijri = hijriData['data']['hijri'];
+          print('Hijri Object: $hijri');
+          
+          if (hijri != null) {
+            final day = hijri['day'].toString().padLeft(2, '0');
+            final month = hijri['month']['en'];
+            final year = hijri['year'];
+            hijriDateStr = '$day $month $year';
+            print('Successfully calculated Hijri date for $dateStr: $hijriDateStr');
+          } else {
+            print('Hijri data is null in API response');
+          }
+        } else {
+          print('API returned error code: ${hijriData['code']} or data is null');
+        }
+      } else {
+        print('Hijri API request failed with status: ${hijriResponse.statusCode}');
+      }
       
       // Fetch Shafi'i (standard) prayer times
       final shafiUrl = Uri.parse(
-        'https://api.aladhan.com/v1/timings/$today?latitude=$latitude&longitude=$longitude&method=2&school=0'
+        'https://api.aladhan.com/v1/timings/$dateStr?latitude=$latitude&longitude=$longitude&method=2&school=0&adjustment=0'
       );
       
       // Fetch Hanafi prayer times
       final hanafiUrl = Uri.parse(
-        'https://api.aladhan.com/v1/timings/$today?latitude=$latitude&longitude=$longitude&method=2&school=1'
+        'https://api.aladhan.com/v1/timings/$dateStr?latitude=$latitude&longitude=$longitude&method=2&school=1&adjustment=0'
       );
       
       final shafiResponse = await http.get(shafiUrl);
@@ -57,10 +86,13 @@ class PrayerTimesService {
         final shafiTimings = shafiData['data']['timings'];
         final hanafiTimings = hanafiData['data']['timings'];
         
+        // Get stored location for display
+        final location = await _locationService.getStoredLocation();
+        final city = location?['city'] ?? 'Unknown Location';
+        final state = location?['state'] ?? '';
+        
         final prayerTimes = {
-          'date': today,
-          'startDate': today,
-          'endDate': DateFormat('yyyy-MM-dd').format(DateTime(now.year, 12, 31)),
+          'date': dateStr,
           'fajr': _formatTime(shafiTimings['Fajr']),
           'sunrise': _formatTime(shafiTimings['Sunrise']),
           'dhuhr': _formatTime(shafiTimings['Dhuhr']),
@@ -68,56 +100,24 @@ class PrayerTimesService {
           'hanafiAsr': _formatTime(hanafiTimings['Asr']),
           'maghrib': _formatTime(shafiTimings['Maghrib']),
           'isha': _formatTime(shafiTimings['Isha']),
+          'city': city,
+          'state': state,
+          'hijriDate': hijriDateStr,
         };
         
-        // Cache the fetched data
-        await _cachePrayerTimes(today, prayerTimes);
-        
-        // Schedule notifications for prayer times
-        await _notificationService.schedulePrayerTimeNotifications(prayerTimes);
-        
+        print('Returning prayer times with Hijri date: $hijriDateStr');
         return prayerTimes;
       } else {
         throw Exception('Failed to load prayer times: ${shafiResponse.statusCode}, ${hanafiResponse.statusCode}');
       }
     } catch (e) {
       print('Error fetching prayer times: $e');
-      
-      // Try to get the most recent cached data if available
-      final cachedData = await _getMostRecentCachedPrayerTimes();
-      if (cachedData != null) {
-        print('Using most recent cached prayer times');
-        
-        // Schedule notifications for cached prayer times
-        await _notificationService.schedulePrayerTimeNotifications(cachedData);
-        
-        return cachedData;
-      }
-      
-      // If no cached data at all, use hardcoded fallback
-      print('Using hardcoded fallback prayer times');
-      final now = DateTime.now();
-      final today = DateFormat('yyyy-MM-dd').format(now);
-      final endOfYear = DateFormat('yyyy-MM-dd').format(DateTime(now.year, 12, 31));
-      
-      final fallbackTimes = {
-        'date': today,
-        'startDate': today,
-        'endDate': endOfYear,
-        'fajr': '06:32 AM',
-        'sunrise': '07:39 AM',
-        'dhuhr': '13:15 PM',
-        'asr': '16:45 PM',
-        'hanafiAsr': '17:15 PM',
-        'maghrib': '19:30 PM',
-        'isha': '20:45 PM'
-      };
-      
-      // Schedule notifications for fallback prayer times
-      await _notificationService.schedulePrayerTimeNotifications(fallbackTimes);
-      
-      return fallbackTimes;
+      return null;
     }
+  }
+
+  Future<Map<String, dynamic>?> fetchCurrentPrayerTimes() async {
+    return fetchPrayerTimesForDate(DateTime.now());
   }
   
   // Helper method to format time from 24-hour to 12-hour format
@@ -136,75 +136,6 @@ class PrayerTimesService {
     } catch (e) {
       print('Error formatting time: $e');
       return time24;
-    }
-  }
-  
-  // Cache prayer times for a specific date
-  Future<void> _cachePrayerTimes(String date, Map<String, dynamic> prayerTimes) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Store the date
-      await prefs.setString(_cachedDateKey, date);
-      
-      // Store the prayer times as JSON
-      await prefs.setString(_cachedPrayerTimesKey, json.encode(prayerTimes));
-      
-      print('Prayer times cached successfully for $date');
-    } catch (e) {
-      print('Error caching prayer times: $e');
-    }
-  }
-  
-  // Get cached prayer times for a specific date
-  Future<Map<String, dynamic>?> _getCachedPrayerTimes(String date) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Check if we have cached data for this date
-      final cachedDate = prefs.getString(_cachedDateKey);
-      if (cachedDate != date) {
-        return null; // No cached data for this date
-      }
-      
-      // Get the cached prayer times
-      final cachedPrayerTimesJson = prefs.getString(_cachedPrayerTimesKey);
-      if (cachedPrayerTimesJson == null) {
-        return null;
-      }
-      
-      // Parse the JSON
-      return json.decode(cachedPrayerTimesJson) as Map<String, dynamic>;
-    } catch (e) {
-      print('Error getting cached prayer times: $e');
-      return null;
-    }
-  }
-  
-  // Get the most recent cached prayer times (regardless of date)
-  Future<Map<String, dynamic>?> _getMostRecentCachedPrayerTimes() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Get the cached prayer times
-      final cachedPrayerTimesJson = prefs.getString(_cachedPrayerTimesKey);
-      if (cachedPrayerTimesJson == null) {
-        return null;
-      }
-      
-      // Parse the JSON
-      final cachedPrayerTimes = json.decode(cachedPrayerTimesJson) as Map<String, dynamic>;
-      
-      // Update the date to today
-      final now = DateTime.now();
-      final today = DateFormat('yyyy-MM-dd').format(now);
-      cachedPrayerTimes['date'] = today;
-      cachedPrayerTimes['startDate'] = today;
-      
-      return cachedPrayerTimes;
-    } catch (e) {
-      print('Error getting most recent cached prayer times: $e');
-      return null;
     }
   }
 }

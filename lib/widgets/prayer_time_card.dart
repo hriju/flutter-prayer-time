@@ -1,61 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class PrayerTimeCard extends StatelessWidget {
-  final String prayerName;
-  final String prayerTime;
+  final String title;
+  final String time;
 
   const PrayerTimeCard({
-    super.key, 
-    required this.prayerName, 
-    required this.prayerTime
+    super.key,
+    required this.title,
+    required this.time,
   });
+
+  IconData _getIconForPrayer(String prayerName) {
+    switch (prayerName.toLowerCase()) {
+      case 'fajr':
+        return LucideIcons.sunrise;
+      case 'sunrise':
+        return LucideIcons.sun;
+      case 'dhuhr':
+        return LucideIcons.sun;
+      case 'asr':
+        return LucideIcons.sun;
+      case 'maghrib':
+        return LucideIcons.sunset;
+      case 'isha':
+        return LucideIcons.moon;
+      default:
+        return LucideIcons.clock;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
             Icon(
-              _getIconForPrayer(prayerName),
-              color: Theme.of(context).primaryColorDark,
-              size: 32,
+              _getIconForPrayer(title),
+              color: Theme.of(context).primaryColor,
+              size: 24,
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                prayerName,
-                style: Theme.of(context).textTheme.bodyLarge!.copyWith(fontWeight: FontWeight.bold),
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             Text(
-              prayerTime,
-              style: Theme.of(context).textTheme.bodyLarge,
+              time,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Theme.of(context).primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  IconData _getIconForPrayer(String prayerName) {
-    switch (prayerName) {
-      case 'fajr':
-        return Icons.brightness_2;
-      case 'sunrise':
-        return Icons.wb_sunny;
-      case 'dhuhr':
-        return Icons.brightness_5;
-      case 'asr' || 'hanafiAsr':
-        return Icons.brightness_4;
-      case 'maghrib':
-        return Icons.brightness_3;
-      case 'isha':
-        return Icons.nightlight_round;
-      default:
-        return Icons.access_time;
-    }
   }
 }
