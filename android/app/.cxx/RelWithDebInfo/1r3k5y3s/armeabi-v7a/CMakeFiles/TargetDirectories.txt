@@ -1,2 +1,0 @@
-/Users/apple/Downloads/flutter-prayer-time-main/android/app/.cxx/RelWithDebInfo/1r3k5y3s/armeabi-v7a/CMakeFiles/edit_cache.dir
-/Users/apple/Downloads/flutter-prayer-time-main/android/app/.cxx/RelWithDebInfo/1r3k5y3s/armeabi-v7a/CMakeFiles/rebuild_cache.dir
