@@ -38,8 +38,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Prayer Times',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.lightBlue,
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
       ),
       home: const PrayerTimesPage(),
     );
