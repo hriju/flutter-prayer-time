@@ -1,6 +1,6 @@
 # Prayer Time App
 
-A Flutter mobile application that displays prayer times and Islamic calendar information for Sri Lanka.
+A Flutter mobile application that displays prayer times and Islamic calendar information with advanced features and beautiful UI.
 
 ## Features
 
