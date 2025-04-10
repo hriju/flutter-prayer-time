@@ -5,6 +5,11 @@ import 'package:prayer_time/services/location_service.dart';
 import 'package:prayer_time/services/notification_service.dart';
 import 'package:prayer_time/widgets/prayer_time_header.dart';
 import 'package:prayer_time/widgets/prayer_time_card.dart';
+import 'package:prayer_time/pages/location_settings_page.dart';
+import 'package:flutter/services.dart';
+import 'dart:async';
+import 'package:prayer_time/pages/calculation_method_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrayerTimesPage extends StatefulWidget {
   const PrayerTimesPage({super.key});
@@ -13,7 +18,7 @@ class PrayerTimesPage extends StatefulWidget {
   PrayerTimesPageState createState() => PrayerTimesPageState();
 }
 
-class PrayerTimesPageState extends State<PrayerTimesPage> {
+class PrayerTimesPageState extends State<PrayerTimesPage> with WidgetsBindingObserver {
   final PrayerTimesService _prayerTimesService = PrayerTimesService();
   final LocationService _locationService = LocationService();
   final NotificationService _notificationService = NotificationService();
@@ -22,11 +27,63 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = true;
   String? _error;
+  Timer? _refreshTimer;
+  bool _isHanafi = false;
 
   @override
   void initState() {
     super.initState();
-    _loadPrayerTimes();
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Initialize services with error handling
+    Future.microtask(() async {
+      try {
+        await _loadJuristicMethod();
+        await _loadPrayerTimes();
+        _startRefreshTimer();
+      } catch (e) {
+        print('Error during initialization: $e');
+        setState(() {
+          _error = 'Error initializing app: $e';
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // App came back to foreground, update the date and prayer times
+      final now = DateTime.now();
+      if (_selectedDate.year != now.year || 
+          _selectedDate.month != now.month || 
+          _selectedDate.day != now.day) {
+        setState(() {
+          _selectedDate = now;
+        });
+        _loadPrayerTimes();
+      }
+    }
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      final now = DateTime.now();
+      if (_selectedDate.year == now.year && 
+          _selectedDate.month == now.month && 
+          _selectedDate.day == now.day) {
+        // Only reload if we're on today's date
+        _loadPrayerTimes();
+      }
+    });
   }
 
   Future<void> _loadPrayerTimes() async {
@@ -36,22 +93,21 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
         _error = null;
       });
 
-      final coordinates = await _locationService.getStoredCoordinates();
-      if (coordinates == null) {
+      final prayerTimes = await _prayerTimesService.fetchPrayerTimesForDate(_selectedDate);
+      print('Received prayer times: $prayerTimes');
+      
+      if (prayerTimes == null || prayerTimes.isEmpty) {
         setState(() {
-          _error = 'Location not set. Please set your location.';
+          _error = 'Failed to load prayer times. Please try again.';
           _isLoading = false;
         });
         return;
       }
 
-      print('Loading prayer times for date: $_selectedDate');
-      final prayerTimes = await _prayerTimesService.fetchPrayerTimesForDate(_selectedDate);
-      print('Received prayer times: $prayerTimes');
-      
-      if (prayerTimes == null) {
+      // Validate required fields
+      if (!prayerTimes.containsKey('city') || !prayerTimes.containsKey('state')) {
         setState(() {
-          _error = 'Failed to load prayer times. Please try again.';
+          _error = 'Invalid prayer times data received.';
           _isLoading = false;
         });
         return;
@@ -63,10 +119,11 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
       });
       
       print('Updated prayer times with Hijri date: ${_prayerTimes?['hijriDate']}');
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error loading prayer times: $e');
+      print('Stack trace: $stackTrace');
       setState(() {
-        _error = 'An error occurred: $e';
+        _error = 'An error occurred: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -87,6 +144,37 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
     _loadPrayerTimes(); // Load new times
   }
 
+  Future<void> _openLocationSettings() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LocationSettingsPage(),
+      ),
+    );
+
+    if (result == true) {
+      // Location was updated, reload prayer times
+      _loadPrayerTimes();
+    }
+  }
+
+  Future<void> _loadJuristicMethod() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isHanafi = prefs.getInt('juristic_method') == 1;
+    });
+  }
+
+  Future<void> _toggleJuristicMethod() async {
+    final prefs = await SharedPreferences.getInstance();
+    final newMethod = !_isHanafi ? 1 : 0;
+    await prefs.setInt('juristic_method', newMethod);
+    setState(() {
+      _isHanafi = !_isHanafi;
+    });
+    _loadPrayerTimes();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,6 +182,25 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
         title: const Text('Prayer Times'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.calculate),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CalculationMethodPage(),
+                ),
+              );
+              // Reload prayer times when returning from settings
+              _loadPrayerTimes();
+            },
+            tooltip: 'Calculation Method',
+          ),
+          IconButton(
+            icon: const Icon(Icons.location_on),
+            onPressed: _openLocationSettings,
+            tooltip: 'Set Location',
+          ),
           IconButton(
             icon: const Icon(Icons.notifications),
             onPressed: () async {
@@ -113,6 +220,11 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
               }
             },
           ),
+          IconButton(
+            icon: Icon(_isHanafi ? Icons.mosque : Icons.mosque_outlined),
+            onPressed: _toggleJuristicMethod,
+            tooltip: _isHanafi ? 'Hanafi Method' : 'Shafi\'i/Maliki/Hanbali Method',
+          ),
         ],
       ),
       body: _isLoading
@@ -125,6 +237,7 @@ class PrayerTimesPageState extends State<PrayerTimesPage> {
                       city: _prayerTimes?['city'] ?? 'Unknown Location',
                       state: _prayerTimes?['state'] ?? '',
                       hijriDate: _prayerTimes?['hijriDate'] ?? 'Calculating...',
+                      gregorianDate: _selectedDate,
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),

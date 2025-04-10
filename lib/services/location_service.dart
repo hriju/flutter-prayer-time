@@ -1,8 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
-import 'dart:html' if (dart.library.io) 'dart:io' as html;
 
 class LocationService {
   static const String _locationKey = 'user_location';
@@ -11,105 +9,46 @@ class LocationService {
   // Geocoding API endpoint (using OpenStreetMap Nominatim API)
   static const String _geocodingUrl = 'https://nominatim.openstreetmap.org/search';
   
-  Future<Map<String, dynamic>?> getStoredLocation() async {
-    try {
-      if (kIsWeb) {
-        // In web mode, try to get from localStorage first
-        final locationJson = html.window.localStorage[_locationKey];
-        if (locationJson != null) {
-          print('Retrieved stored location from localStorage: $locationJson');
-          return json.decode(locationJson);
-        }
-      }
-      
-      // Fallback to SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final locationJson = prefs.getString(_locationKey);
-      if (locationJson != null) {
-        print('Retrieved stored location from SharedPreferences: $locationJson');
-        return json.decode(locationJson);
-      }
-      
-      print('No stored location found');
-      return null;
-    } catch (e) {
-      print('Error getting stored location: $e');
-      return null;
+  Future<Map<String, String>> getStoredLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final locationJson = prefs.getString(_locationKey);
+    if (locationJson != null) {
+      return Map<String, String>.from(json.decode(locationJson));
     }
+    return {
+      'city': 'Mecca',
+      'state': 'Makkah Province',
+      'zipCode': ''
+    };
   }
   
-  Future<Map<String, dynamic>?> getStoredCoordinates() async {
-    try {
-      if (kIsWeb) {
-        // In web mode, try to get from localStorage first
-        final coordinatesJson = html.window.localStorage[_coordinatesKey];
-        if (coordinatesJson != null) {
-          print('Retrieved stored coordinates from localStorage: $coordinatesJson');
-          return json.decode(coordinatesJson);
-        }
-      }
-      
-      // Fallback to SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final coordinatesJson = prefs.getString(_coordinatesKey);
-      if (coordinatesJson != null) {
-        print('Retrieved stored coordinates from SharedPreferences: $coordinatesJson');
-        return json.decode(coordinatesJson);
-      }
-      
-      print('No stored coordinates found');
-      return null;
-    } catch (e) {
-      print('Error getting stored coordinates: $e');
-      return null;
-    }
-  }
-  
-  Future<void> storeLocation(String city, String state) async {
-    try {
-      final locationData = {
-        'city': city,
-        'state': state,
+  Future<Map<String, double>> getStoredCoordinates() async {
+    final prefs = await SharedPreferences.getInstance();
+    final coordinatesJson = prefs.getString(_coordinatesKey);
+    if (coordinatesJson != null) {
+      final Map<String, dynamic> data = json.decode(coordinatesJson);
+      return {
+        'latitude': data['latitude'].toDouble(),
+        'longitude': data['longitude'].toDouble(),
       };
-      
-      if (kIsWeb) {
-        // In web mode, store in localStorage
-        html.window.localStorage[_locationKey] = json.encode(locationData);
-        print('Stored location in localStorage: $locationData');
-      }
-      
-      // Also store in SharedPreferences as fallback
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_locationKey, json.encode(locationData));
-      print('Stored location in SharedPreferences: $locationData');
-    } catch (e) {
-      print('Error storing location: $e');
     }
+    return {
+      'latitude': 21.422487,
+      'longitude': 39.826206
+    };
   }
   
-  Future<void> storeCoordinates(double latitude, double longitude) async {
-    try {
-      final coordinatesData = {
-        'latitude': latitude,
-        'longitude': longitude,
-      };
-      
-      if (kIsWeb) {
-        // In web mode, store in localStorage
-        html.window.localStorage[_coordinatesKey] = json.encode(coordinatesData);
-        print('Stored coordinates in localStorage: $coordinatesData');
-      }
-      
-      // Also store in SharedPreferences as fallback
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_coordinatesKey, json.encode(coordinatesData));
-      print('Stored coordinates in SharedPreferences: $coordinatesData');
-    } catch (e) {
-      print('Error storing coordinates: $e');
-    }
+  Future<void> saveLocation(Map<String, String> locationData) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_locationKey, json.encode(locationData));
   }
   
-  Future<Map<String, dynamic>?> getCoordinatesFromZipCode(String zipCode) async {
+  Future<void> saveCoordinates(Map<String, double> coordinatesData) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_coordinatesKey, json.encode(coordinatesData));
+  }
+  
+  Future<Map<String, double>?> getCoordinatesFromZipCode(String zipCode) async {
     try {
       print('Fetching coordinates for ZIP code: $zipCode');
       final response = await http.get(
@@ -150,21 +89,21 @@ class LocationService {
           
           print('Extracted city: $city, state: $state');
           
-          // Store the location and coordinates immediately
+          // Store the location and coordinates
           if (city.isNotEmpty && state.isNotEmpty) {
-            await storeLocation(city, state);
-            await storeCoordinates(
-              double.parse(result['lat']),
-              double.parse(result['lon']),
-            );
+            await saveLocation({
+              'city': city,
+              'state': state,
+              'zipCode': zipCode,
+            });
+            
+            final coordinates = {
+              'latitude': double.parse(result['lat']),
+              'longitude': double.parse(result['lon']),
+            };
+            await saveCoordinates(coordinates);
+            return coordinates;
           }
-          
-          return {
-            'latitude': double.parse(result['lat']),
-            'longitude': double.parse(result['lon']),
-            'city': city,
-            'state': state,
-          };
         } else {
           print('No results found for ZIP code: $zipCode');
         }
@@ -178,7 +117,7 @@ class LocationService {
     }
   }
   
-  Future<Map<String, dynamic>?> getCoordinatesFromCityState(String city, String state) async {
+  Future<Map<String, double>?> getCoordinatesFromCityState(String city, String state) async {
     try {
       print('Fetching coordinates for city: $city, state: $state');
       final query = '$city, $state, USA';
@@ -220,21 +159,21 @@ class LocationService {
           
           print('Extracted city: $foundCity, state: $foundState');
           
-          // Store the location and coordinates immediately
+          // Store the location and coordinates
           if (foundCity.isNotEmpty && foundState.isNotEmpty) {
-            await storeLocation(foundCity, foundState);
-            await storeCoordinates(
-              double.parse(result['lat']),
-              double.parse(result['lon']),
-            );
+            await saveLocation({
+              'city': foundCity,
+              'state': foundState,
+              'zipCode': '',
+            });
+            
+            final coordinates = {
+              'latitude': double.parse(result['lat']),
+              'longitude': double.parse(result['lon']),
+            };
+            await saveCoordinates(coordinates);
+            return coordinates;
           }
-          
-          return {
-            'latitude': double.parse(result['lat']),
-            'longitude': double.parse(result['lon']),
-            'city': foundCity.isNotEmpty ? foundCity : city,
-            'state': foundState.isNotEmpty ? foundState : state,
-          };
         } else {
           print('No results found for city: $city, state: $state');
         }

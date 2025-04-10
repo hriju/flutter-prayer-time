@@ -13,24 +13,32 @@ class NotificationService {
   static const String _notificationPrefsKey = 'notification_settings';
 
   Future<void> initialize() async {
-    tz.initializeTimeZones();
-    
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-    
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-    
-    await _notifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
+    try {
+      tz.initializeTimeZones();
+      
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
+      
+      await _notifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _onNotificationTapped,
+      );
+      
+      print('Notification service initialized successfully');
+    } catch (e, stackTrace) {
+      print('Error initializing notification service: $e');
+      print('Stack trace: $stackTrace');
+      // Don't rethrow the error, let the app continue without notifications
+    }
   }
 
   Future<void> _onNotificationTapped(NotificationResponse response) async {
