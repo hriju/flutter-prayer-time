@@ -53,33 +53,33 @@ class NotificationService {
   }) async {
     try {
       final androidDetails = AndroidNotificationDetails(
-        'prayer_times_channel',
-        'Prayer Times',
-        channelDescription: 'Notifications for prayer times',
+          'prayer_times_channel',
+          'Prayer Times',
+          channelDescription: 'Notifications for prayer times',
         importance: Importance.high,
-        priority: Priority.high,
+          priority: Priority.high,
         sound: const RawResourceAndroidNotificationSound('azan'),
-      );
-      
+        );
+        
       final iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
-      
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        );
+        
       final notificationDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-      
+          android: androidDetails,
+          iOS: iosDetails,
+        );
+        
       await _notifications.zonedSchedule(
         prayerName.hashCode,
-        'Prayer Time',
+          'Prayer Time',
         'It\'s time for $prayerName in $location',
         tz.TZDateTime.from(prayerTime, tz.local),
-        notificationDetails,
-        androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          notificationDetails,
+          androidAllowWhileIdle: true,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: json.encode({
           'prayerName': prayerName,
           'time': prayerTime.toIso8601String(),
@@ -92,7 +92,7 @@ class NotificationService {
       print('Error scheduling notification: $e');
     }
   }
-
+  
   Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
   }

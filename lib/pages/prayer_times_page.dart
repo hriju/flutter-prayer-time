@@ -286,7 +286,7 @@ class PrayerTimesPageState extends State<PrayerTimesPage> with WidgetsBindingObs
                       ),
                     ],
                   ],
-                ),
+            ),
     );
   }
 }
