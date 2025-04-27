@@ -4,11 +4,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 class PrayerTimeCard extends StatelessWidget {
   final String title;
   final String time;
+  final String iqamahTime;
 
   const PrayerTimeCard({
     super.key,
     required this.title,
     required this.time,
+    required this.iqamahTime,
   });
 
   IconData _getIconForPrayer(String prayerName) {
@@ -52,12 +54,23 @@ class PrayerTimeCard extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              time,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Theme.of(context).primaryColor,
-                fontWeight: FontWeight.bold,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  time,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Iqamah: $iqamahTime',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

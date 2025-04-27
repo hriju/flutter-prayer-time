@@ -51,7 +51,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
           _zipCodeController.text,
         );
       } else {
-        result = await _locationService.getCoordinatesFromCityState(
+        result = await _locationService.getCoordinatesFromCityAndState(
           _cityController.text,
           _stateController.text,
         );

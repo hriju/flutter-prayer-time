@@ -48,10 +48,48 @@ class LocationService {
     await prefs.setString(_coordinatesKey, json.encode(coordinatesData));
   }
   
+  Future<Map<String, double>?> getCoordinatesFromCityAndState(String city, String state) async {
+    try {
+      print('Fetching coordinates for city: $city, state: $state');
+      final response = await http.get(
+        Uri.parse('$_geocodingUrl?city=$city&state=$state&format=json&limit=1&addressdetails=1'),
+        headers: {
+          'User-Agent': 'PrayerTimeApp/1.0',
+          'Accept': 'application/json',
+        },
+      );
+      
+      print('Response status code: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> results = json.decode(response.body);
+        if (results.isNotEmpty) {
+          final result = results[0];
+          print('Found location: ${result['display_name']}');
+          
+          final coordinates = {
+            'latitude': double.parse(result['lat'].toString()),
+            'longitude': double.parse(result['lon'].toString()),
+          };
+          
+          await saveCoordinates(coordinates);
+          return coordinates;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting coordinates from city and state: $e');
+      return null;
+    }
+  }
+  
   Future<Map<String, double>?> getCoordinatesFromZipCode(String zipCode) async {
     try {
       print('Fetching coordinates for ZIP code: $zipCode');
-      final response = await http.get(
+      
+      // First try with US country code
+      var response = await http.get(
         Uri.parse('$_geocodingUrl?postalcode=$zipCode&format=json&limit=1&countrycodes=us&addressdetails=1'),
         headers: {
           'User-Agent': 'PrayerTimeApp/1.0',
@@ -82,6 +120,8 @@ class LocationService {
             city = address['village'];
           } else if (address['suburb'] != null) {
             city = address['suburb'];
+          } else if (address['county'] != null) {
+            city = address['county'];
           }
           
           // Get state from address
@@ -98,91 +138,69 @@ class LocationService {
             });
             
             final coordinates = {
-              'latitude': double.parse(result['lat']),
-              'longitude': double.parse(result['lon']),
+              'latitude': double.parse(result['lat'].toString()),
+              'longitude': double.parse(result['lon'].toString()),
             };
             await saveCoordinates(coordinates);
             return coordinates;
           }
-        } else {
-          print('No results found for ZIP code: $zipCode');
         }
-      } else {
-        print('Error response: ${response.statusCode} - ${response.body}');
       }
-      return null;
-    } catch (e) {
-      print('Error getting coordinates from zip code: $e');
-      return null;
-    }
-  }
-  
-  Future<Map<String, double>?> getCoordinatesFromCityState(String city, String state) async {
-    try {
-      print('Fetching coordinates for city: $city, state: $state');
-      final query = '$city, $state, USA';
-      final response = await http.get(
-        Uri.parse('$_geocodingUrl?q=${Uri.encodeComponent(query)}&format=json&limit=1&addressdetails=1'),
+      
+      // If first attempt failed, try without country code restriction
+      response = await http.get(
+        Uri.parse('$_geocodingUrl?postalcode=$zipCode&format=json&limit=1&addressdetails=1'),
         headers: {
           'User-Agent': 'PrayerTimeApp/1.0',
           'Accept': 'application/json',
         },
       );
       
-      print('Response status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
-      
       if (response.statusCode == 200) {
         final List<dynamic> results = json.decode(response.body);
         if (results.isNotEmpty) {
           final result = results[0];
-          print('Found location: ${result['display_name']}');
+          print('Found location in second attempt: ${result['display_name']}');
           
-          // Extract city and state from address components
           final address = result['address'] as Map<String, dynamic>;
-          String foundCity = '';
-          String foundState = '';
+          String city = '';
+          String state = '';
           
-          // Try different address components for city
           if (address['city'] != null) {
-            foundCity = address['city'];
+            city = address['city'];
           } else if (address['town'] != null) {
-            foundCity = address['town'];
+            city = address['town'];
           } else if (address['village'] != null) {
-            foundCity = address['village'];
+            city = address['village'];
           } else if (address['suburb'] != null) {
-            foundCity = address['suburb'];
+            city = address['suburb'];
+          } else if (address['county'] != null) {
+            city = address['county'];
           }
           
-          // Get state from address
-          foundState = address['state'] ?? '';
+          state = address['state'] ?? '';
           
-          print('Extracted city: $foundCity, state: $foundState');
-          
-          // Store the location and coordinates
-          if (foundCity.isNotEmpty && foundState.isNotEmpty) {
+          if (city.isNotEmpty && state.isNotEmpty) {
             await saveLocation({
-              'city': foundCity,
-              'state': foundState,
-              'zipCode': '',
+              'city': city,
+              'state': state,
+              'zipCode': zipCode,
             });
             
             final coordinates = {
-              'latitude': double.parse(result['lat']),
-              'longitude': double.parse(result['lon']),
+              'latitude': double.parse(result['lat'].toString()),
+              'longitude': double.parse(result['lon'].toString()),
             };
             await saveCoordinates(coordinates);
             return coordinates;
           }
-        } else {
-          print('No results found for city: $city, state: $state');
         }
-      } else {
-        print('Error response: ${response.statusCode} - ${response.body}');
       }
+      
+      print('No results found for ZIP code: $zipCode');
       return null;
     } catch (e) {
-      print('Error getting coordinates from city and state: $e');
+      print('Error getting coordinates from zip code: $e');
       return null;
     }
   }

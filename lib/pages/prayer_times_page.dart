@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:prayer_time/pages/calculation_method_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:prayer_time/pages/events_page.dart';
 
 class PrayerTimesPage extends StatefulWidget {
   const PrayerTimesPage({super.key});
@@ -175,6 +176,33 @@ class PrayerTimesPageState extends State<PrayerTimesPage> with WidgetsBindingObs
     _loadPrayerTimes();
   }
 
+  String _getIqamahTime(String prayerName, DateTime date) {
+    // Get the day of the month
+    final day = date.day;
+    
+    switch (prayerName.toLowerCase()) {
+      case 'fajr':
+        return '6:15 AM';
+      case 'dhuhr':
+        return '2:00 PM';
+      case 'asr':
+        return '6:15 PM';
+      case 'maghrib':
+        // Maghrib iqamah time varies by date
+        if (day >= 1 && day <= 5) return '7:56 PM';
+        if (day >= 6 && day <= 10) return '8:00 PM';
+        if (day >= 11 && day <= 15) return '8:04 PM';
+        if (day >= 16 && day <= 20) return '8:08 PM';
+        if (day >= 21 && day <= 25) return '8:12 PM';
+        if (day >= 26 && day <= 30) return '8:15 PM';
+        return '7:56 PM'; // Default fallback
+      case 'isha':
+        return '9:30 PM';
+      default:
+        return 'N/A';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,6 +210,18 @@ class PrayerTimesPageState extends State<PrayerTimesPage> with WidgetsBindingObs
         title: const Text('Prayer Times'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.event),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EventsPage(),
+                ),
+              );
+            },
+            tooltip: 'Events',
+          ),
           IconButton(
             icon: const Icon(Icons.calculate),
             onPressed: () async {
@@ -259,32 +299,44 @@ class PrayerTimesPageState extends State<PrayerTimesPage> with WidgetsBindingObs
                         ],
                       ),
                     ),
-                    if (_prayerTimes != null) ...[
-                      PrayerTimeCard(
-                        title: 'Fajr',
-                        time: _prayerTimes!['fajr'] ?? 'N/A',
+                    if (_prayerTimes != null)
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          children: [
+                            PrayerTimeCard(
+                              title: 'Fajr',
+                              time: _prayerTimes!['fajr'] ?? 'N/A',
+                              iqamahTime: _getIqamahTime('Fajr', _selectedDate),
+                            ),
+                            PrayerTimeCard(
+                              title: 'Sunrise',
+                              time: _prayerTimes!['sunrise'] ?? 'N/A',
+                              iqamahTime: 'N/A',
+                            ),
+                            PrayerTimeCard(
+                              title: 'Dhuhr',
+                              time: _prayerTimes!['dhuhr'] ?? 'N/A',
+                              iqamahTime: _getIqamahTime('Dhuhr', _selectedDate),
+                            ),
+                            PrayerTimeCard(
+                              title: 'Asr',
+                              time: _prayerTimes!['asr'] ?? 'N/A',
+                              iqamahTime: _getIqamahTime('Asr', _selectedDate),
+                            ),
+                            PrayerTimeCard(
+                              title: 'Maghrib',
+                              time: _prayerTimes!['maghrib'] ?? 'N/A',
+                              iqamahTime: _getIqamahTime('Maghrib', _selectedDate),
+                            ),
+                            PrayerTimeCard(
+                              title: 'Isha',
+                              time: _prayerTimes!['isha'] ?? 'N/A',
+                              iqamahTime: _getIqamahTime('Isha', _selectedDate),
+                            ),
+                          ],
+                        ),
                       ),
-                      PrayerTimeCard(
-                        title: 'Sunrise',
-                        time: _prayerTimes!['sunrise'] ?? 'N/A',
-                      ),
-                      PrayerTimeCard(
-                        title: 'Dhuhr',
-                        time: _prayerTimes!['dhuhr'] ?? 'N/A',
-                      ),
-                      PrayerTimeCard(
-                        title: 'Asr',
-                        time: _prayerTimes!['asr'] ?? 'N/A',
-                      ),
-                      PrayerTimeCard(
-                        title: 'Maghrib',
-                        time: _prayerTimes!['maghrib'] ?? 'N/A',
-                      ),
-                      PrayerTimeCard(
-                        title: 'Isha',
-                        time: _prayerTimes!['isha'] ?? 'N/A',
-                      ),
-                    ],
                   ],
             ),
     );
